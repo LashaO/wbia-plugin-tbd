@@ -597,7 +597,7 @@ def _db_labels_for_tbd(ibs, daid_list):
 
 # for cosine distance
 def distance_to_score(distance):
-    score = 1 - distance
+    score = (2 - distance) / 2
     score = np.float64(score)
     return score
 
