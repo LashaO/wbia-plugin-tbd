@@ -20,7 +20,7 @@ data:
 engine:
   num_workers: 0
   train_batch_size: 6
-  valid_batch_size: 24
+  valid_batch_size: 12
   epochs: 30
   seed: 42
   device: cuda

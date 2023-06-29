@@ -1,9 +1,9 @@
-from datasets import TbdDataset, get_train_transforms, get_valid_transforms
+from datasets import MiewIdDataset, get_train_transforms, get_valid_transforms
 from logging_utils import init_wandb
-from models import TbdNet
-from etl import preprocess_data, print_intersect_stats
+from models import MiewIdNet
+from etl import preprocess_data, print_intersect_stats, convert_name_to_id
 from losses import fetch_loss
-from schedulers import TbdScheduler
+from schedulers import MiewIdScheduler
 from engine import run_fn
 from helpers import get_config
 
@@ -29,10 +29,8 @@ def parse_args():
     )
     return parser.parse_args()
 
-def run(config_path):
+def run(config):
     
-    config = get_config(config_path)
-
     checkpoint_dir = f"{config.checkpoint_dir}/{config.project_name}/{config.exp_name}/{config.model_params.model_name}-{config.data.image_size[0]}-{config.engine.loss_module}"
     os.makedirs(checkpoint_dir, exist_ok=True)
     print('Checkpoints will be saved at: ', checkpoint_dir)
@@ -61,22 +59,30 @@ def run(config_path):
                                 viewpoint_list=config.data.viewpoint_list, 
                                 n_filter_min=config.data.val_n_filter_min, 
                                 n_subsample_max=config.data.val_n_subsample_max)
-
-    print_intersect_stats(df_train, df_val)
+    
+    print_intersect_stats(df_train, df_val, individual_key='name_orig')
+    
+    # df_train['name'] = convert_name_to_id(df_train['name'].values)
+    # df_val['name'] = convert_name_to_id(df_val['name'].values)
+    
 
 
     n_train_classes = df_train['name'].nunique()
 
-    train_dataset = TbdDataset(
+    train_dataset = MiewIdDataset(
         csv=df_train,
         images_dir = config.data.images_dir,
         transforms=get_train_transforms(config),
+        fliplr=config.test.fliplr,
+        fliplr_view=config.test.fliplr_view
     )
         
-    valid_dataset = TbdDataset(
+    valid_dataset = MiewIdDataset(
         csv=df_val,
         images_dir=config.data.images_dir,
         transforms=get_valid_transforms(config),
+        fliplr=config.test.fliplr,
+        fliplr_view=config.test.fliplr_view
     )
         
     train_loader = torch.utils.data.DataLoader(
@@ -101,7 +107,7 @@ def run(config_path):
     if config.model_params.n_classes != n_train_classes:
         print(f"WARNING: Overriding n_classes in config ({config.model_params.n_classes}) which is different from actual n_train_classes ({n_train_classes}). This parameters has to be readjusted in config for proper checkpoint loading after training.")
         config.model_params.n_classes = n_train_classes
-    model = TbdNet(**dict(config.model_params))
+    model = MiewIdNet(**dict(config.model_params))
     model.to(device)
 
     criterion = fetch_loss()
@@ -110,18 +116,21 @@ def run(config_path):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=config.scheduler_params.lr_start)
 
-    scheduler = TbdScheduler(optimizer,**dict(config.scheduler_params))
+    scheduler = MiewIdScheduler(optimizer,**dict(config.scheduler_params))
 
 
     if config.engine.use_wandb:
         load_dotenv()
         init_wandb(config.exp_name, config.project_name, config=None)
 
-    run_fn(config, model, train_loader, valid_loader, criterion, optimizer, scheduler, device, checkpoint_dir, use_wandb=config.engine.use_wandb)
+    best_score = run_fn(config, model, train_loader, valid_loader, criterion, optimizer, scheduler, device, checkpoint_dir, use_wandb=config.engine.use_wandb)
+
+    return best_score
 
 if __name__ == '__main__':
     args = parse_args()
     config_path = args.config
-    print(f"Loading config from path: {config_path}")
+    
+    config = get_config(config_path)
 
-    run(config_path)
+    run(config)

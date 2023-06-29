@@ -1,7 +1,7 @@
 import warnings
 from torch.optim.lr_scheduler import _LRScheduler
 
-class TbdScheduler(_LRScheduler):
+class MiewIdScheduler(_LRScheduler):
     def __init__(self, optimizer, lr_start=5e-6, lr_max=1e-5,
                  lr_min=1e-6, lr_ramp_ep=5, lr_sus_ep=0, lr_decay=0.8,
                  last_epoch=-1):
@@ -11,7 +11,7 @@ class TbdScheduler(_LRScheduler):
         self.lr_ramp_ep = lr_ramp_ep
         self.lr_sus_ep = lr_sus_ep
         self.lr_decay = lr_decay
-        super(TbdScheduler, self).__init__(optimizer, last_epoch)
+        super(MiewIdScheduler, self).__init__(optimizer, last_epoch)
         
     def get_lr(self):
         if not self._get_lr_called_within_step:

@@ -2,6 +2,7 @@
 from torch.utils.data import Dataset
 import cv2
 import numpy as np
+import torch
 
 
 class PluginDataset(Dataset):
@@ -67,6 +68,6 @@ class PluginDataset(Dataset):
             image = augmented['image']
             # image = self.transform(image.copy())
             
-        return image, self.names[idx]
+        return image, self.names[idx], self.image_paths[idx], torch.Tensor(self.bboxes[idx])
 
 

@@ -81,6 +81,7 @@ class Config(DictableClass):
     
 
 def get_config(file_path: str) -> Config:
+    print(f"Loading config from path: {file_path}")
     with open(file_path, 'r') as file:
         config_dict = yaml.safe_load(file)
 

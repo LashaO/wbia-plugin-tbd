@@ -12,13 +12,15 @@ import os
 import torch
 import torchvision.transforms as transforms  # noqa: E402
 from scipy.spatial import distance_matrix
+import pandas as pd
 
 import tqdm
 
-from wbia_tbd.helpers import get_config, read_json
-from wbia_tbd.models import get_model
-from wbia_tbd.datasets import PluginDataset, get_test_transforms
-from wbia_tbd.metrics import pred_light, compute_distance_matrix, eval_onevsall
+from wbia_miew_id.helpers import get_config, read_json
+from wbia_miew_id.models import get_model
+from wbia_miew_id.datasets import PluginDataset, get_test_transforms
+from wbia_miew_id.metrics import pred_light, compute_distance_matrix, eval_onevsall
+from wbia_miew_id.visualization import draw_one, draw_batch
 
 (print, rrr, profile) = ut.inject2(__name__)
 
@@ -36,32 +38,74 @@ DEMOS = {
 }
 
 CONFIGS = {
-    'whale_beluga': 'https://cthulhu.dyn.wildme.io/public/models/tbd.beluga.yaml',
-    'delphinapterus_leucas': 'https://cthulhu.dyn.wildme.io/public/models/tbd.beluga.yaml',
-    'tursiops_truncatus': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.yaml',
-    'dolphin_whitesided+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.yaml',
-    'white_shark+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.yaml',
-    'spinner_dolphin': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.yaml',
-    'stenella_longirostris': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.yaml',
-    'sotalia_guianensis': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.yaml',
-    'short_fin_pilot_whale+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.yaml',
-    'globicephala_melas': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.yaml',
-    'pilot_whale+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.yaml',
-    'globicephala_macrorhynchus': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.yaml',}
+    'whale_beluga': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.beluga.yaml',
+    'delphinapterus_leucas': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.beluga.yaml',
+    'tursiops_truncatus': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'dolphin_whitesided+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'white_shark+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'spinner_dolphin': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'stenella_longirostris': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'sotalia_guianensis': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'short_fin_pilot_whale+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'globicephala_melas': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'pilot_whale+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'globicephala_macrorhynchus': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'globicephala_melas': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'short_fin_pilot_whale+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'hyperoodon_ampullatus': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'whale_humpback+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'lagenodelphis_hosei': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'cougar+head': 'https://cthulhu.dyn.wildme.io/public/models/miewid_lion_head_v0.yaml',
+    'lion+head': 'https://cthulhu.dyn.wildme.io/public/models/miewid_lion_head_v0.yaml',
+    'lioness+head': 'https://cthulhu.dyn.wildme.io/public/models/miewid_lion_head_v0.yaml',
+    'lion_general+head': 'https://cthulhu.dyn.wildme.io/public/models/miewid_lion_head_v0.yaml',
+    'panthera_leo': 'https://cthulhu.dyn.wildme.io/public/models/miewid_lion_head_v0.yaml',
+    'dolphin_spotted+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'stenella_frontalis': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'whale_falsekiller': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'pseudorca_crassidens': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'dolphin_rissos+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'grampus_griseus': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'phocoena_phocoena': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'harbour_porpoise+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'balaenoptera_acutorostrata+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml',
+    'whale_minke+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.yaml'
+    }
+    
 
 MODELS = {
-    'whale_beluga': 'https://cthulhu.dyn.wildme.io/public/models/tbd.beluga.bin',
-    'delphinapterus_leucas': 'https://cthulhu.dyn.wildme.io/public/models/tbd.beluga.bin',
-    'tursiops_truncatus': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.bin',
-    'dolphin_whitesided+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.bin',
-    'white_shark+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.bin',
-    'spinner_dolphin': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.bin',
-    'stenella_longirostris': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.bin',
-    'sotalia_guianensis': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.bin',
-    'short_fin_pilot_whale+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.bin',
-    'globicephala_melas': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.bin',
-    'pilot_whale+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.bin',
-    'globicephala_macrorhynchus': 'https://cthulhu.dyn.wildme.io/public/models/tbd.bottlenose.bin',
+    'whale_beluga': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.beluga.bin',
+    'delphinapterus_leucas': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.beluga.bin',
+    'tursiops_truncatus': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'dolphin_whitesided+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'white_shark+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'spinner_dolphin': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'stenella_longirostris': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'sotalia_guianensis': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'short_fin_pilot_whale+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'globicephala_melas': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'pilot_whale+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'globicephala_macrorhynchus': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'globicephala_melas': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'short_fin_pilot_whale+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'hyperoodon_ampullatus': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'whale_humpback+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'lagenodelphis_hosei': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'lion+head': 'https://cthulhu.dyn.wildme.io/public/models/miewid_lion_head_v0.bin',
+    'lioness+head': 'https://cthulhu.dyn.wildme.io/public/models/miewid_lion_head_v0.bin',
+    'lion_general+head': 'https://cthulhu.dyn.wildme.io/public/models/miewid_lion_head_v0.bin',
+    'panthera_leo': 'https://cthulhu.dyn.wildme.io/public/models/miewid_lion_head_v0.bin',
+    'cougar+head': 'https://cthulhu.dyn.wildme.io/public/models/miewid_lion_head_v0.bin',
+    'dolphin_spotted+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'stenella_frontalis': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'whale_falsekiller': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'pseudorca_crassidens': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'dolphin_rissos+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'grampus_griseus': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'phocoena_phocoena': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'harbour_porpoise+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'balaenoptera_acutorostrata+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin',
+    'whale_minke+fin_dorsal': 'https://cthulhu.dyn.wildme.io/public/models/miew_id.bottlenose.bin'
 }
 
 
@@ -69,7 +113,7 @@ GLOBAL_EMBEDDING_CACHE = {}
 
 
 @register_ibs_method
-def tbd_embedding(ibs, aid_list, config=None, use_depc=True):
+def miew_id_embedding(ibs, aid_list, config=None, use_depc=True):
     r"""
     Generate embeddings using the Pose-Invariant Embedding (TBD)
     Args:
@@ -77,13 +121,13 @@ def tbd_embedding(ibs, aid_list, config=None, use_depc=True):
         aid_list  (int): annot ids specifying the input
         use_depc (bool): use dependency cache
     CommandLine:
-        python -m wbia_tbd._plugin tbd_embedding
+        python -m wbia_miew_id._plugin miew_id_embedding
     Example:
         >>> # ENABLE_DOCTEST
-        >>> import wbia_tbd
-        >>> from wbia_tbd._plugin import DEMOS, CONFIGS, MODELS
+        >>> import wbia_miew_id
+        >>> from wbia_miew_id._plugin import DEMOS, CONFIGS, MODELS
         >>> species = 'rhincodon_typus'
-        >>> test_ibs = wbia_tbd._plugin.wbia_tbd_test_ibs(DEMOS[species], species, 'test2021')
+        >>> test_ibs = wbia_miew_id._plugin.wbia_miew_id_test_ibs(DEMOS[species], species, 'test2021')
         >>> aid_list = test_ibs.get_valid_aids(species=species)
         >>> rank1 = test_ibs.evaluate_distmat(aid_list, CONFIGS[species], use_depc=False)
         >>> expected_rank1 = 0.81366
@@ -91,10 +135,10 @@ def tbd_embedding(ibs, aid_list, config=None, use_depc=True):
 
     Example:
         >>> # ENABLE_DOCTEST
-        >>> import wbia_tbd
-        >>> from wbia_tbd._plugin import DEMOS, CONFIGS, MODELS
+        >>> import wbia_miew_id
+        >>> from wbia_miew_id._plugin import DEMOS, CONFIGS, MODELS
         >>> species = 'whale_grey'
-        >>> test_ibs = wbia_tbd._plugin.wbia_tbd_test_ibs(DEMOS[species], species, 'test2021')
+        >>> test_ibs = wbia_miew_id._plugin.wbia_miew_id_test_ibs(DEMOS[species], species, 'test2021')
         >>> aid_list = test_ibs.get_valid_aids(species=species)
         >>> rank1 = test_ibs.evaluate_distmat(aid_list, CONFIGS[species], use_depc=False)
         >>> expected_rank1 = 0.69505
@@ -102,10 +146,10 @@ def tbd_embedding(ibs, aid_list, config=None, use_depc=True):
 
     Example:
         >>> # ENABLE_DOCTEST
-        >>> import wbia_tbd
-        >>> from wbia_tbd._plugin import DEMOS, CONFIGS, MODELS
+        >>> import wbia_miew_id
+        >>> from wbia_miew_id._plugin import DEMOS, CONFIGS, MODELS
         >>> species = 'horse_wild'
-        >>> test_ibs = wbia_tbd._plugin.wbia_tbd_test_ibs(DEMOS[species], species, 'test2021')
+        >>> test_ibs = wbia_miew_id._plugin.wbia_miew_id_test_ibs(DEMOS[species], species, 'test2021')
         >>> aid_list = test_ibs.get_valid_aids(species=species)
         >>> rank1 = test_ibs.evaluate_distmat(aid_list, CONFIGS[species], use_depc=False)
         >>> expected_rank1 = 0.32773
@@ -124,10 +168,10 @@ def tbd_embedding(ibs, aid_list, config=None, use_depc=True):
         if use_depc:
             config_map = {'config_path': config}
             dirty_embeddings = ibs.depc_annot.get(
-                'TbdEmbedding', dirty_aids, 'embedding', config_map
+                'MiewIdEmbedding', dirty_aids, 'embedding', config_map
             )
         else:
-            dirty_embeddings = tbd_compute_embedding(ibs, dirty_aids, config)
+            dirty_embeddings = miew_id_compute_embedding(ibs, dirty_aids, config)
 
         for dirty_aid, dirty_embedding in zip(dirty_aids, dirty_embeddings):
             GLOBAL_EMBEDDING_CACHE[dirty_aid] = dirty_embedding
@@ -137,31 +181,31 @@ def tbd_embedding(ibs, aid_list, config=None, use_depc=True):
     return embeddings
 
 
-class TbdEmbeddingConfig(dt.Config):  # NOQA
+class MiewIdEmbeddingConfig(dt.Config):  # NOQA
     _param_info_list = [
         ut.ParamInfo('config_path', default=None),
     ]
 
 
 @register_preproc_annot(
-    tablename='TbdEmbedding',
+    tablename='MiewIdEmbedding',
     parents=[ANNOTATION_TABLE],
     colnames=['embedding'],
     coltypes=[np.ndarray],
-    configclass=TbdEmbeddingConfig,
-    fname='tbd',
+    configclass=MiewIdEmbeddingConfig,
+    fname='miew_id',
     chunksize=128,
 )
 @register_ibs_method
-def tbd_embedding_depc(depc, aid_list, config=None):
+def miew_id_embedding_depc(depc, aid_list, config=None):
     ibs = depc.controller
-    embs = tbd_compute_embedding(ibs, aid_list, config=config['config_path'])
+    embs = miew_id_compute_embedding(ibs, aid_list, config=config['config_path'])
     for aid, emb in zip(aid_list, embs):
         yield (np.array(emb),)
 
 
 @register_ibs_method
-def tbd_compute_embedding(ibs, aid_list, config=None, multithread=False):
+def miew_id_compute_embedding(ibs, aid_list, config=None, multithread=False):
     # Get species from the first annotation
     species = ibs.get_annot_species_texts(aid_list[0])
 
@@ -180,7 +224,7 @@ def tbd_compute_embedding(ibs, aid_list, config=None, multithread=False):
     embeddings = []
     model.eval()
     with torch.no_grad():
-        for images, names in test_loader:
+        for images, names, image_paths, image_bboxes in test_loader:
             if config.use_gpu:
                 images = images.cuda(non_blocking=True)
 
@@ -191,7 +235,7 @@ def tbd_compute_embedding(ibs, aid_list, config=None, multithread=False):
     return embeddings
 
 
-class TbdConfig(dt.Config):  # NOQA
+class MiewIdConfig(dt.Config):  # NOQA
     def get_param_info_list(self):
         return [
             ut.ParamInfo('config_path', None),
@@ -243,9 +287,9 @@ def get_match_results(depc, qaid_list, daid_list, score_list, config):
         yield match_result
 
 
-class TbdRequest(dt.base.VsOneSimilarityRequest):
+class MiewIdRequest(dt.base.VsOneSimilarityRequest):
     _symmetric = False
-    _tablename = 'Tbd'
+    _tablename = 'MiewId'
 
     @ut.accepts_scalar_input
     def get_fmatch_overlayed_chip(request, aid_list, overlay=True, config=None):
@@ -254,15 +298,64 @@ class TbdRequest(dt.base.VsOneSimilarityRequest):
         chips = ibs.get_annot_chips(aid_list)
         return chips
 
-    def render_single_result(request, cm, aid, **kwargs):
-        # HACK FOR WEB VIEWER
-        overlay = kwargs.get('draw_fmatches')
-        chips = request.get_fmatch_overlayed_chip(
-            [cm.qaid, aid], overlay=overlay, config=request.config
-        )
-        out_image = vt.stack_image_list(chips)
-        return out_image
+    # def render_single_result(request, cm, aid, **kwargs):
+    #     # HACK FOR WEB VIEWER
+    #     overlay = kwargs.get('draw_fmatches')
+    #     chips = request.get_fmatch_overlayed_chip(
+    #         [cm.qaid, aid], overlay=overlay, config=request.config
+    #     )
+    #     out_image = vt.stack_image_list(chips)
+        
+    #     return out_image
 
+    def render_single_result(request, cm, aid, **kwargs):
+
+        depc = request.depc
+        ibs = depc.controller
+
+        # Load config
+        species = ibs.get_annot_species_texts(aid)
+
+        config = None
+        if config is None:
+            config = CONFIGS[species]
+        config = _load_config(config)
+
+        # Load model
+        model = _load_model(config, MODELS[species], use_dataparallel=False)
+
+        # This list has to be in the format of [query_aid, db_aid]
+        aid_list = [cm.qaid, aid]
+        test_loader, test_dataset = _load_data(ibs, aid_list, config)
+
+        out_image = draw_one(config, test_loader,  model, images_dir = '', method='gradcam_plus_plus', eigen_smooth=False, show=False)
+
+        return out_image
+    
+    def render_batch_result(request, cm, aids):
+
+        depc = request.depc
+        ibs = depc.controller
+
+        # Load config
+        species = ibs.get_annot_species_texts(aids)[0]
+
+        config = None
+        if config is None:
+            config = CONFIGS[species]
+        config = _load_config(config)
+
+        # Load model
+        model = _load_model(config, MODELS[species], use_dataparallel=False)
+
+        # This list has to be in the format of [query_aid, db_aid]
+        aid_list = np.concatenate(([cm.qaid],  aids))
+        test_loader, test_dataset = _load_data(ibs, aid_list, config)
+
+        batch_images = draw_batch(config, test_loader,  model, images_dir = '', method='gradcam_plus_plus', eigen_smooth=False, show=False)
+
+        return batch_images
+    
     def postprocess_execute(request, table, parent_rowids, rowids, result_list):
         qaid_list, daid_list = list(zip(*parent_rowids))
         score_list = ut.take_column(result_list, 0)
@@ -274,7 +367,7 @@ class TbdRequest(dt.base.VsOneSimilarityRequest):
 
     def execute(request, *args, **kwargs):
         # kwargs['use_cache'] = False
-        result_list = super(TbdRequest, request).execute(*args, **kwargs)
+        result_list = super(MiewIdRequest, request).execute(*args, **kwargs)
         qaids = kwargs.pop('qaids', None)
         if qaids is not None:
             result_list = [result for result in result_list if result.qaid in qaids]
@@ -282,17 +375,17 @@ class TbdRequest(dt.base.VsOneSimilarityRequest):
 
 
 @register_preproc_annot(
-    tablename='Tbd',
+    tablename='MiewId',
     parents=[ANNOTATION_TABLE, ANNOTATION_TABLE],
     colnames=['score'],
     coltypes=[float],
-    configclass=TbdConfig,
-    requestclass=TbdRequest,
-    fname='tbd',
+    configclass=MiewIdConfig,
+    requestclass=MiewIdRequest,
+    fname='miew_id',
     rm_extern_on_delete=True,
     chunksize=None,
 )
-def wbia_plugin_tbd(depc, qaid_list, daid_list, config):
+def wbia_plugin_miew_id(depc, qaid_list, daid_list, config):
     ibs = depc.controller
 
     qaids = list(set(qaid_list))
@@ -303,27 +396,27 @@ def wbia_plugin_tbd(depc, qaid_list, daid_list, config):
     qaid_score_dict = {}
     for qaid in tqdm.tqdm(qaids):
         if use_knn:
-                tbd_dists = ibs.tbd_predict_light(
+                miew_id_dists = ibs.miew_id_predict_light(
                     qaid,
                     daids,
                     config['config_path'],
                 )
-                tbd_scores = distance_dicts_to_score_dicts(tbd_dists)
+                miew_id_scores = distance_dicts_to_score_dicts(miew_id_dists)
 
-                # aid_score_list = aid_scores_from_name_scores(ibs, tbd_name_scores, daids)
-                aid_score_list = aid_scores_from_score_dict(tbd_scores, daids)
+                # aid_score_list = aid_scores_from_name_scores(ibs, miew_id_name_scores, daids)
+                aid_score_list = aid_scores_from_score_dict(miew_id_scores, daids)
                 aid_score_dict = dict(zip(daids, aid_score_list))
 
                 qaid_score_dict[qaid] = aid_score_dict
         else:
-            tbd_annot_distances = ibs.tbd_predict_light_distance(
+            miew_id_annot_distances = ibs.miew_id_predict_light_distance(
                 qaid,
                 daids,
                 config['config_path'],
             )
             qaid_score_dict[qaid] = {}
-            for daid, tbd_annot_distance in zip(daids, tbd_annot_distances):
-                qaid_score_dict[qaid][daid] = distance_to_score(tbd_annot_distance)
+            for daid, miew_id_annot_distance in zip(daids, miew_id_annot_distances):
+                qaid_score_dict[qaid][daid] = distance_to_score(miew_id_annot_distance)
 
     for qaid, daid in zip(qaid_list, daid_list):
         if qaid == daid:
@@ -339,7 +432,7 @@ def evaluate_distmat(ibs, aid_list, config, use_depc, ranks=[1, 5, 10, 20]):
     """Evaluate 1vsall accuracy of matching on annotations by
     computing distance matrix.
     """
-    embs = np.array(tbd_embedding(ibs, aid_list, config, use_depc))
+    embs = np.array(miew_id_embedding(ibs, aid_list, config, use_depc))
     print('Computing distance matrix ...')
     distmat = compute_distance_matrix(embs, embs, metric='cosine')
 
@@ -360,7 +453,7 @@ def _load_config(config_url):
     """
     config_fname = config_url.split('/')[-1]
     config_file = ut.grab_file_url(
-        config_url, appname='wbia_tbd', check_hash=False, fname=config_fname
+        config_url, appname='wbia_miew_id', check_hash=False, fname=config_fname
     )
 
     config = get_config(config_file)
@@ -370,7 +463,7 @@ def _load_config(config_url):
     return config
 
 
-def _load_model(config, model_url):
+def _load_model(config, model_url, use_dataparallel=True):
     r"""
     Load a model based on config file
     """
@@ -386,7 +479,7 @@ def _load_model(config, model_url):
     # Download the model weights
     model_fname = model_url.split('/')[-1]
     model_path = ut.grab_file_url(
-        model_url, appname='wbia_tbd', check_hash=False, fname=model_fname
+        model_url, appname='wbia_miew_id', check_hash=False, fname=model_fname
     )
 
     # load_pretrained_weights(model, model_path)
@@ -398,7 +491,7 @@ def _load_model(config, model_url):
     # else:
     #    model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
     # print('Loaded model from {}'.format(model_path))
-    if config.use_gpu:
+    if config.use_gpu and use_dataparallel:
         model = torch.nn.DataParallel(model).cuda()
     return model
 
@@ -443,7 +536,7 @@ def _load_data(ibs, aid_list, config, multithread=False):
     return dataloader, dataset
 
 
-def wbia_tbd_test_ibs(demo_db_url, species, subset):
+def wbia_miew_id_test_ibs(demo_db_url, species, subset):
     r"""
     Create a database to test orientation detection from a coco annotation file
     """
@@ -454,7 +547,7 @@ def wbia_tbd_test_ibs(demo_db_url, species, subset):
         return test_ibs
     else:
         # Download demo data archive
-        db_dir = ut.grab_zipped_url(demo_db_url, appname='wbia_tbd')
+        db_dir = ut.grab_zipped_url(demo_db_url, appname='wbia_miew_id')
 
         # Load coco annotations
         json_file = os.path.join(
@@ -495,9 +588,9 @@ def wbia_tbd_test_ibs(demo_db_url, species, subset):
 
 
 @register_ibs_method
-def tbd_predict_light(ibs, qaid, daid_list, config=None):
-    db_embs = np.array(ibs.tbd_embedding(daid_list, config))
-    query_emb = np.array(ibs.tbd_embedding([qaid], config))
+def miew_id_predict_light(ibs, qaid, daid_list, config=None):
+    db_embs = np.array(ibs.miew_id_embedding(daid_list, config))
+    query_emb = np.array(ibs.miew_id_embedding([qaid], config))
 
     # db_labels = np.array(ibs.get_annot_name_texts(daid_list, distinguish_unknowns=True))
     db_labels = np.array(daid_list)
@@ -507,10 +600,10 @@ def tbd_predict_light(ibs, qaid, daid_list, config=None):
 
 
 @register_ibs_method
-def tbd_predict_light_distance(ibs, qaid, daid_list, config=None):
+def miew_id_predict_light_distance(ibs, qaid, daid_list, config=None):
     assert len(daid_list) == len(set(daid_list))
-    db_embs = np.array(ibs.tbd_embedding(daid_list, config))
-    query_emb = np.array(ibs.tbd_embedding([qaid], config))
+    db_embs = np.array(ibs.miew_id_embedding(daid_list, config))
+    query_emb = np.array(ibs.miew_id_embedding([qaid], config))
 
     input1 = torch.Tensor(query_emb)
     input2 = torch.Tensor(db_embs)
@@ -519,10 +612,10 @@ def tbd_predict_light_distance(ibs, qaid, daid_list, config=None):
     return distances
 
 
-def _tbd_accuracy(ibs, qaid, daid_list):
+def _miew_id_accuracy(ibs, qaid, daid_list):
     daids = daid_list.copy()
     daids.remove(qaid)
-    ans = ibs.tbd_predict_light(qaid, daids)
+    ans = ibs.miew_id_predict_light(qaid, daids)
     ans_names = [row['label'] for row in ans]
     ground_truth = ibs.get_annot_name_texts(qaid)
     try:
@@ -533,10 +626,10 @@ def _tbd_accuracy(ibs, qaid, daid_list):
     return rank
 
 
-def tbd_mass_accuracy(ibs, aid_list, daid_list=None):
+def miew_id_mass_accuracy(ibs, aid_list, daid_list=None):
     if daid_list is None:
         daid_list = aid_list
-    ranks = [_tbd_accuracy(ibs, aid, daid_list) for aid in aid_list]
+    ranks = [_miew_id_accuracy(ibs, aid, daid_list) for aid in aid_list]
     return ranks
 
 
@@ -581,9 +674,9 @@ def subset_with_resights_range(ibs, aid_list, min_sights=3, max_sights=10):
 
 
 @register_ibs_method
-def tbd_new_accuracy(ibs, aid_list, min_sights=3, max_sights=10):
+def miew_id_new_accuracy(ibs, aid_list, min_sights=3, max_sights=10):
     aids = subset_with_resights_range(ibs, aid_list, min_sights, max_sights)
-    ranks = tbd_mass_accuracy(ibs, aids)
+    ranks = miew_id_mass_accuracy(ibs, aids)
     accuracy = accuracy_at_k(ibs, ranks)
     print(
         'Accuracy at k for annotations with %s-%s sightings:' % (min_sights, max_sights)
@@ -592,10 +685,10 @@ def tbd_new_accuracy(ibs, aid_list, min_sights=3, max_sights=10):
     return accuracy
 
 
-# The following functions are cotbdd from TBD v1 because these functions
+# The following functions are comiew_idd from TBD v1 because these functions
 # are agnostic tot eh method of computing embeddings:
-# https://github.com/WildMeOrg/wbia-plugin-tbd/wbia_tbd/_plugin.py
-def _db_labels_for_tbd(ibs, daid_list):
+# https://github.com/WildMeOrg/wbia-plugin-miew_id/wbia_miew_id/_plugin.py
+def _db_labels_for_miew_id(ibs, daid_list):
     db_labels = ibs.get_annot_name_texts(daid_list, distinguish_unknowns=True)
     # db_auuids = ibs.get_annot_name_rowids(daid_list)
     # # later we must know which db_labels are for single auuids, hence prefix
@@ -631,7 +724,7 @@ def aid_scores_from_score_dict(name_score_dict, daid_list):
     return daid_scores
 
 def aid_scores_from_name_scores(ibs, name_score_dict, daid_list):
-    daid_name_list = list(_db_labels_for_tbd(ibs, daid_list))
+    daid_name_list = list(_db_labels_for_miew_id(ibs, daid_list))
 
     name_count_dict = {
         name: daid_name_list.count(name) for name in name_score_dict.keys()
@@ -654,7 +747,7 @@ def aid_scores_from_name_scores(ibs, name_score_dict, daid_list):
 if __name__ == '__main__':
     r"""
     CommandLine:
-        python -m wbia_tbd._plugin --allexamples
+        python -m wbia_miew_id._plugin --allexamples
     """
     import multiprocessing
 
